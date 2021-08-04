@@ -695,25 +695,22 @@ SP_API enum sp_return sp_drain(struct sp_port *port)
 		RETURN_FAIL("FlushFileBuffers() failed");
 	RETURN_OK();
 #else
-	int result;
-	while (1) {
-#ifdef __ANDROID__
-		int arg = 1;
-		result = ioctl(port->fd, TCSBRK, &arg);
-#else
-		result = tcdrain(port->fd);
-#endif
-		if (result < 0) {
-			if (errno == EINTR) {
-				DEBUG("tcdrain() was interrupted");
-				continue;
-			} else {
-				RETURN_FAIL("tcdrain() failed");
-			}
-		} else {
-			RETURN_OK();
-		}
-	}
+    /* Use ioctl() instead of tcdrain() on Raspberry Pi.
+     * tcdrain() takes too much time and breaks RS485 communication
+     */
+    u_int8_t lsr;
+    do {
+        int result = ioctl(port->fd, TIOCSERGETLSR, &lsr);
+        if (result < 0) {
+            if (errno == EINTR) {
+                DEBUG("tcdrain() was interrupted");
+                continue;
+            } else {
+                RETURN_FAIL("tcdrain() failed");
+            }
+        }
+    } while (!(lsr & TIOCSER_TEMT));
+    RETURN_OK();
 #endif
 }
 
